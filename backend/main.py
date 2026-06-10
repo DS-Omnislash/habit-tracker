@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 from supabase import create_client
 import jwt
+from datetime import date
 
 # ── Settings ───────────────────────────────────────────────────────────
 
@@ -80,4 +81,41 @@ def delete_habit(habit_id: str, authorization: str = Header(...)):
         .delete()\
         .eq("id", habit_id)\
         .eq("user_id", user_id)\
+        .execute()
+
+# ── Completions ────────────────────────────────────────────────────────
+
+@app.post("/completions/{habit_id}", status_code=201)
+def complete_habit(habit_id: str, authorization: str = Header(...)):
+    user_id = get_user_id(authorization)
+
+    # Check if already completed today
+    existing = supabase.table("completions")\
+        .select("id")\
+        .eq("habit_id", habit_id)\
+        .eq("user_id", user_id)\
+        .eq("completed_on", str(date.today()))\
+        .execute()
+
+    if existing.data:
+        raise HTTPException(status_code=400, detail="Already completed today")
+
+    result = supabase.table("completions")\
+        .insert({
+            "habit_id": habit_id,
+            "user_id": user_id,
+            "completed_on": str(date.today())
+        })\
+        .execute()
+    return result.data[0]
+
+
+@app.delete("/completions/{habit_id}", status_code=204)
+def uncomplete_habit(habit_id: str, authorization: str = Header(...)):
+    user_id = get_user_id(authorization)
+    supabase.table("completions")\
+        .delete()\
+        .eq("habit_id", habit_id)\
+        .eq("user_id", user_id)\
+        .eq("completed_on", str(date.today()))\
         .execute()
