@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Habit Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 32px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    h1 { font-size: 1.5rem; margin-bottom: 24px; }
+
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    button:hover { background: #4338ca; }
+
+    .habit {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .habit.done { background: #f0fdf4; border-color: #bbf7d0; }
+
+    .habit span { flex: 1; font-size: 1rem; }
+
+    .habit button {
+      width: auto;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      margin: 0;
+    }
+
+    .delete-btn { background: #ef4444; }
+    .delete-btn:hover { background: #dc2626; }
+
+    #error { color: #ef4444; margin-bottom: 12px; font-size: 0.9rem; }
+    #section-habits { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Login section -->
+    <div id="section-login">
+      <h1>🗓️ Habit Tracker</h1>
+      <p id="error"></p>
+      <input type="email" id="email" placeholder="Email" />
+      <input type="password" id="password" placeholder="Password" />
+      <button onclick="login()">Login</button>
+    </div>
+
+    <!-- Habits section (hidden until logged in) -->
+    <div id="section-habits">
+      <h1>🗓️ Today's Habits</h1>
+      <div id="habits-list"></div>
+      <input type="text" id="new-habit" placeholder="New habit name..." />
+      <button onclick="createHabit()">Add Habit</button>
+      <button onclick="logout()" style="background:#6b7280">Logout</button>
+    </div>
+
+  </div>
+<script>
+  const API = "http://localhost:8000";
+  let token = localStorage.getItem("token");
+
+  // ── Startup ─────────────────────────────────────────────────────────
+  if (token) showHabits();
+
+  // ── Auth ────────────────────────────────────────────────────────────
+  async function login() {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+
+    const res = await fetch(`https://tuuwgfawttwmljxsitnv.supabase.co/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1dXdnZmF3dHR3bWxqeHNpdG52Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MDczNTAsImV4cCI6MjA5NjQ4MzM1MH0.p-OsHynYnbymupQ7QePZU473-KLQThn1JA2E5Vt7G7E",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      document.getElementById("error").textContent = "Invalid email or password";
+      return;
+    }
+
+    token = data.access_token;
+    localStorage.setItem("token", token);
+    showHabits();
+  }
+
+  function logout() {
+    localStorage.removeItem("token");
+    token = null;
+    document.getElementById("section-habits").style.display = "none";
+    document.getElementById("section-login").style.display = "block";
+  }
+
+  // ── UI helpers ───────────────────────────────────────────────────────
+  function showHabits() {
+    document.getElementById("section-login").style.display = "none";
+    document.getElementById("section-habits").style.display = "block";
+    loadHabits();
+  }
+
+  // ── Habits ───────────────────────────────────────────────────────────
+  async function loadHabits() {
+    const res = await fetch(`${API}/habits`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const habits = await res.json();
+
+    // Get today's completions
+    const compRes = await fetch(`${API}/completions`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const completions = await compRes.json();
+    const doneIds = completions.map(c => c.habit_id);
+
+    // Render habits
+    const list = document.getElementById("habits-list");
+    list.innerHTML = "";
+
+    if (habits.length === 0) {
+      list.innerHTML = "<p style='color:#999; margin-bottom:16px'>No habits yet. Add one below!</p>";
+      return;
+    }
+
+    habits.forEach(habit => {
+      const done = doneIds.includes(habit.id);
+      const div = document.createElement("div");
+      div.className = `habit ${done ? "done" : ""}`;
+      div.innerHTML = `
+        <span>${done ? "✅" : "⬜"} ${habit.name}</span>
+        <button onclick="toggleHabit('${habit.id}', ${done})">${done ? "Undo" : "Done"}</button>
+        <button class="delete-btn" onclick="deleteHabit('${habit.id}')">Delete</button>
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  async function createHabit() {
+    const input = document.getElementById("new-habit");
+    if (!input.value.trim()) return;
+
+    await fetch(`${API}/habits`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name: input.value.trim() })
+    });
+
+    input.value = "";
+    loadHabits();
+  }
+
+  async function deleteHabit(id) {
+    await fetch(`${API}/habits/${id}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    loadHabits();
+  }
+
+  async function toggleHabit(id, done) {
+    if (done) {
+      await fetch(`${API}/completions/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+    } else {
+      await fetch(`${API}/completions/${id}`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+    }
+    loadHabits();
+  }
+</script>
+</body>
+</html>
