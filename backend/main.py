@@ -119,3 +119,13 @@ def uncomplete_habit(habit_id: str, authorization: str = Header(...)):
         .eq("user_id", user_id)\
         .eq("completed_on", str(date.today()))\
         .execute()
+
+@app.get("/completions")
+def get_today_completions(authorization: str = Header(...)):
+    user_id = get_user_id(authorization)
+    result = supabase.table("completions")\
+        .select("*")\
+        .eq("user_id", user_id)\
+        .eq("completed_on", str(date.today()))\
+        .execute()
+    return result.data
