@@ -2,6 +2,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from supabase import create_client
 import jwt
 from datetime import date
@@ -9,12 +10,11 @@ from datetime import date
 # ── Settings ───────────────────────────────────────────────────────────
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_file=".env")
+
     supabase_url: str
     supabase_anon_key: str
     supabase_service_key: str
-
-    class Config:
-        env_file = ".env"
 
 settings = Settings()
 
@@ -82,6 +82,10 @@ def delete_habit(habit_id: str, authorization: str = Header(...)):
         .eq("id", habit_id)\
         .eq("user_id", user_id)\
         .execute()
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 # ── Completions ────────────────────────────────────────────────────────
 
